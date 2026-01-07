@@ -70,8 +70,9 @@ namespace pipeline {
         }else if(codec==VideoCodec::H265){
             std::stringstream ss;
             ss<<"video/x-h265";
-            ss<<", stream-format=\"byte-stream\"";
+            //ss<<", stream-format=\"byte-stream\"";
             //ss<<", alignment=\"nal\"";
+            ss<<", stream-format=\"byte-stream\", alignment=au";
             ss<<" ! ";
             return ss.str();
         }
