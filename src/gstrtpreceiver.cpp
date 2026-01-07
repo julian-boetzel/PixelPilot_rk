@@ -55,7 +55,7 @@ namespace pipeline {
     static std::string create_parse_for_codec(const VideoCodec& codec){
         // config-interval=-1 = makes 100% sure each keyframe has SPS and PPS
         if(codec==VideoCodec::H264)return "h264parse config-interval=-1 ! ";
-        if(codec==VideoCodec::H265)return "h265parse config-interval=-1 alignment=au ! ";
+        if(codec==VideoCodec::H265)return "h265parse config-interval=-1  ! ";
         assert(false);
         return "";
     }
@@ -70,9 +70,8 @@ namespace pipeline {
         }else if(codec==VideoCodec::H265){
             std::stringstream ss;
             ss<<"video/x-h265";
-            //ss<<", stream-format=\"byte-stream\"";
+            ss<<", stream-format=\"byte-stream\"";
             //ss<<", alignment=\"nal\"";
-            ss<<", stream-format=\"byte-stream\", alignment=au";
             ss<<" ! ";
             return ss.str();
         }
