@@ -55,7 +55,7 @@ namespace pipeline {
     static std::string create_parse_for_codec(const VideoCodec& codec){
         // config-interval=-1 = makes 100% sure each keyframe has SPS and PPS
         if(codec==VideoCodec::H264)return "h264parse config-interval=-1 ! ";
-        if(codec==VideoCodec::H265)return "h265parse config-interval=-1  ! ";
+        if(codec==VideoCodec::H265)return "h265parse config-interval=-1 alignment=au ! ";
         assert(false);
         return "";
     }
@@ -116,6 +116,7 @@ namespace {
     static std::atomic<bool> g_idr_enabled{true};
     static std::atomic<bool> g_stream_idr_pending{false};
     static std::atomic<bool> g_record_idr_pending{false};
+    static std::atomic<bool> g_drop_until_idr{false}; // drop frames after loss until next IDR
 
     static uint64_t now_ms() {
         const auto now = std::chrono::steady_clock::now().time_since_epoch();
@@ -268,6 +269,7 @@ namespace {
 
         g_last_rtp_gap_idr_ms.store(now, std::memory_order_relaxed);
         spdlog::info("[IDR] RTP gap detected (missing {} packet(s)) -> request IDR", gap_count);
+        g_drop_until_idr.store(true, std::memory_order_relaxed);
         request_idr_bursts("rtp-gap", 1, false);
     }
 
@@ -587,6 +589,7 @@ namespace {
         g_last_rtp_seq_valid.store(false, std::memory_order_relaxed);
         g_last_rtp_seq_ms.store(0, std::memory_order_relaxed);
         g_stream_idr_pending.store(false, std::memory_order_relaxed);
+        g_drop_until_idr.store(false, std::memory_order_relaxed);
         std::lock_guard<std::mutex> lock(g_last_hop_mutex);
         g_last_hop_ip.clear();
     }
@@ -784,15 +787,31 @@ void GstRtpReceiver::loop_pull_samples()
 
 void GstRtpReceiver::on_new_sample(std::shared_ptr<std::vector<uint8_t> > sample)
 {
-    if (sample && !sample->empty()) {
-        maybe_mark_idr_received(sample->data(), sample->size(), m_video_codec);
+    if (!sample || sample->empty()) {
+        return;
     }
-    if(m_cb){
+
+    // If we detected an RTP gap, frames until the next IDR are likely to contain
+    // corrupted references / partial picture artifacts. Drop them to avoid partial-picture
+    // corruption and recover cleanly on IDR.
+    if (g_idr_enabled.load(std::memory_order_relaxed) &&
+        g_drop_until_idr.load(std::memory_order_relaxed)) {
+
+        if (!has_idr_frame(sample->data(), sample->size(), m_video_codec)) {
+            return;
+        }
+
+        g_drop_until_idr.store(false, std::memory_order_relaxed);
+    }
+
+    maybe_mark_idr_received(sample->data(), sample->size(), m_video_codec);
+
+    if (m_cb) {
         //debug_sample(sample);
         m_cb(sample);
-    }else{
     }
 }
+
 
 /* socket → appsrc */
 static constexpr int SOCKET_POLL_TIMEOUT_MS = 100;
