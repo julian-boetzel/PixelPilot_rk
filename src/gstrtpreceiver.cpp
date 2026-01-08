@@ -771,7 +771,8 @@ std::string GstRtpReceiver::construct_gstreamer_pipeline()
     ss<<pipeline::create_rtp_depacketize_for_codec(m_video_codec);
     ss<<pipeline::create_parse_for_codec(m_video_codec);
     ss<<pipeline::create_out_caps(m_video_codec);
-    ss<<" appsink drop=true name=out_appsink";
+    // ss<<" appsink drop=true name=out_appsink";
+    ss<<" queue max-size-buffers=1 leaky=downstream ! appsink name=out_appsink max-buffers=1 drop=true";
     return ss.str();
 }
 
@@ -922,7 +923,8 @@ std::string GstRtpReceiver::construct_file_playback_pipeline(const char * file_p
     ss<<"filesrc location="<<file_path<<" ! qtdemux ! ";
     ss<<pipeline::create_parse_for_codec(m_video_codec);
     ss << pipeline::create_out_caps(m_video_codec);
-    ss << " appsink drop=true name=out_appsink";
+    // ss << " appsink drop=true name=out_appsink";
+    ss<<" queue max-size-buffers=1 leaky=downstream ! appsink name=out_appsink max-buffers=1 drop=true";
     return ss.str();
 }
 
