@@ -764,17 +764,20 @@ static void loop_pull_appsink_samples(bool& keep_looping,GstElement *app_sink_el
 std::string GstRtpReceiver::construct_gstreamer_pipeline()
 {
     std::stringstream ss;
-    if (! unix_socket)
-        ss<<"udpsrc port="<<m_port<<" "<<pipeline::gst_create_rtp_caps(m_video_codec)<<" ! ";
+    if (!unix_socket)
+        ss << "udpsrc port=" << m_port << " " << pipeline::gst_create_rtp_caps(m_video_codec) << " ! ";
     else
-        ss<<"appsrc name=appsrc "<<pipeline::gst_create_rtp_caps(m_video_codec)<<" ! ";
-    ss<<pipeline::create_rtp_depacketize_for_codec(m_video_codec);
-    ss<<pipeline::create_parse_for_codec(m_video_codec);
-    ss<<pipeline::create_out_caps(m_video_codec);
-    // ss<<" appsink drop=true name=out_appsink";
-    ss<<" queue max-size-buffers=1 leaky=downstream ! appsink name=out_appsink max-buffers=1 drop=true";
+        ss << "appsrc name=appsrc " << pipeline::gst_create_rtp_caps(m_video_codec) << " ! ";
+
+    ss << pipeline::create_rtp_depacketize_for_codec(m_video_codec);
+    ss << pipeline::create_parse_for_codec(m_video_codec);
+    ss << pipeline::create_out_caps(m_video_codec);
+
+    ss << " appsink name=out_appsink max-buffers=1 drop=true";
+
     return ss.str();
 }
+
 
 void GstRtpReceiver::loop_pull_samples()
 {
@@ -918,15 +921,18 @@ void GstRtpReceiver::stop_receiving() {
     spdlog::info("GstRtpReceiver::stop_receiving end");
 }
 
-std::string GstRtpReceiver::construct_file_playback_pipeline(const char * file_path) {
+std::string GstRtpReceiver::construct_file_playback_pipeline(const char *file_path)
+{
     std::stringstream ss;
-    ss<<"filesrc location="<<file_path<<" ! qtdemux ! ";
-    ss<<pipeline::create_parse_for_codec(m_video_codec);
+    ss << "filesrc location=" << file_path << " ! qtdemux ! ";
+    ss << pipeline::create_parse_for_codec(m_video_codec);
     ss << pipeline::create_out_caps(m_video_codec);
-    // ss << " appsink drop=true name=out_appsink";
-    ss<<" queue max-size-buffers=1 leaky=downstream ! appsink name=out_appsink max-buffers=1 drop=true";
+
+    ss << " appsink name=out_appsink max-buffers=1 drop=true";
+
     return ss.str();
 }
+
 
 void GstRtpReceiver::switch_to_file_playback(const char * file_path) {
     stop_receiving();
