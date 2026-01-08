@@ -773,7 +773,8 @@ std::string GstRtpReceiver::construct_gstreamer_pipeline()
     ss << pipeline::create_parse_for_codec(m_video_codec);
     ss << pipeline::create_out_caps(m_video_codec);
 
-    ss << " appsink name=out_appsink max-buffers=1 drop=true";
+    ss << " queue max-size-buffers=2 max-size-bytes=0 max-size-time=0 ! ";
+    ss << "appsink name=out_appsink max-buffers=1 drop=true emit-signals=true sync=false";
 
     return ss.str();
 }
@@ -928,7 +929,8 @@ std::string GstRtpReceiver::construct_file_playback_pipeline(const char *file_pa
     ss << pipeline::create_parse_for_codec(m_video_codec);
     ss << pipeline::create_out_caps(m_video_codec);
 
-    ss << " appsink name=out_appsink max-buffers=1 drop=true";
+    ss << " queue max-size-buffers=2 max-size-bytes=0 max-size-time=0 ! ";
+    ss << "appsink name=out_appsink max-buffers=1 drop=true emit-signals=true sync=false";
 
     return ss.str();
 }
