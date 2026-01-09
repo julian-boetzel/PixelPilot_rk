@@ -115,7 +115,6 @@ namespace {
     static std::atomic<bool> g_idr_enabled{true};
     static std::atomic<bool> g_stream_idr_pending{false};
     static std::atomic<bool> g_record_idr_pending{false};
-    static std::atomic<bool> g_drop_until_idr{false}; // drop frames after loss until next IDR
 
     static uint64_t now_ms() {
         const auto now = std::chrono::steady_clock::now().time_since_epoch();
@@ -268,7 +267,6 @@ namespace {
 
         g_last_rtp_gap_idr_ms.store(now, std::memory_order_relaxed);
         spdlog::info("[IDR] RTP gap detected (missing {} packet(s)) -> request IDR", gap_count);
-        g_drop_until_idr.store(true, std::memory_order_relaxed);
         request_idr_bursts("rtp-gap", 1, false);
     }
 
@@ -588,7 +586,6 @@ namespace {
         g_last_rtp_seq_valid.store(false, std::memory_order_relaxed);
         g_last_rtp_seq_ms.store(0, std::memory_order_relaxed);
         g_stream_idr_pending.store(false, std::memory_order_relaxed);
-        g_drop_until_idr.store(false, std::memory_order_relaxed);
         std::lock_guard<std::mutex> lock(g_last_hop_mutex);
         g_last_hop_ip.clear();
     }
@@ -764,21 +761,16 @@ static void loop_pull_appsink_samples(bool& keep_looping,GstElement *app_sink_el
 std::string GstRtpReceiver::construct_gstreamer_pipeline()
 {
     std::stringstream ss;
-    if (!unix_socket)
-        ss << "udpsrc port=" << m_port << " " << pipeline::gst_create_rtp_caps(m_video_codec) << " ! ";
+    if (! unix_socket)
+        ss<<"udpsrc port="<<m_port<<" "<<pipeline::gst_create_rtp_caps(m_video_codec)<<" ! ";
     else
-        ss << "appsrc name=appsrc " << pipeline::gst_create_rtp_caps(m_video_codec) << " ! ";
-
-    ss << pipeline::create_rtp_depacketize_for_codec(m_video_codec);
-    ss << pipeline::create_parse_for_codec(m_video_codec);
-    ss << pipeline::create_out_caps(m_video_codec);
-
-    ss << " queue max-size-buffers=2 max-size-bytes=0 max-size-time=0 ! ";
-    ss << "appsink name=out_appsink max-buffers=1 drop=true emit-signals=true sync=false";
-
+        ss<<"appsrc name=appsrc "<<pipeline::gst_create_rtp_caps(m_video_codec)<<" ! ";
+    ss<<pipeline::create_rtp_depacketize_for_codec(m_video_codec);
+    ss<<pipeline::create_parse_for_codec(m_video_codec);
+    ss<<pipeline::create_out_caps(m_video_codec);
+    ss<<" appsink drop=true name=out_appsink";
     return ss.str();
 }
-
 
 void GstRtpReceiver::loop_pull_samples()
 {
@@ -791,31 +783,15 @@ void GstRtpReceiver::loop_pull_samples()
 
 void GstRtpReceiver::on_new_sample(std::shared_ptr<std::vector<uint8_t> > sample)
 {
-    if (!sample || sample->empty()) {
-        return;
+    if (sample && !sample->empty()) {
+        maybe_mark_idr_received(sample->data(), sample->size(), m_video_codec);
     }
-
-    // If we detected an RTP gap, frames until the next IDR are likely to contain
-    // corrupted references / partial picture artifacts. Drop them to avoid partial-picture
-    // corruption and recover cleanly on IDR.
-    if (g_idr_enabled.load(std::memory_order_relaxed) &&
-        g_drop_until_idr.load(std::memory_order_relaxed)) {
-
-        if (!has_idr_frame(sample->data(), sample->size(), m_video_codec)) {
-            return;
-        }
-
-        g_drop_until_idr.store(false, std::memory_order_relaxed);
-    }
-
-    maybe_mark_idr_received(sample->data(), sample->size(), m_video_codec);
-
-    if (m_cb) {
+    if(m_cb){
         //debug_sample(sample);
         m_cb(sample);
+    }else{
     }
 }
-
 
 /* socket → appsrc */
 static constexpr int SOCKET_POLL_TIMEOUT_MS = 100;
@@ -922,19 +898,14 @@ void GstRtpReceiver::stop_receiving() {
     spdlog::info("GstRtpReceiver::stop_receiving end");
 }
 
-std::string GstRtpReceiver::construct_file_playback_pipeline(const char *file_path)
-{
+std::string GstRtpReceiver::construct_file_playback_pipeline(const char * file_path) {
     std::stringstream ss;
-    ss << "filesrc location=" << file_path << " ! qtdemux ! ";
-    ss << pipeline::create_parse_for_codec(m_video_codec);
+    ss<<"filesrc location="<<file_path<<" ! qtdemux ! ";
+    ss<<pipeline::create_parse_for_codec(m_video_codec);
     ss << pipeline::create_out_caps(m_video_codec);
-
-    ss << " queue max-size-buffers=2 max-size-bytes=0 max-size-time=0 ! ";
-    ss << "appsink name=out_appsink max-buffers=1 drop=true emit-signals=true sync=false";
-
+    ss << " appsink drop=true name=out_appsink";
     return ss.str();
 }
-
 
 void GstRtpReceiver::switch_to_file_playback(const char * file_path) {
     stop_receiving();
