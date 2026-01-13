@@ -64,7 +64,7 @@ void create_air_aalink_menu(lv_obj_t * parent) {
     add_entry_to_menu_page(menu_page_data,"Loading VTX Power Output ...", txPower, reload_slider_value);
     add_entry_to_menu_page(menu_page_data,"Loading Link resilience (dB) ...", mcsShift, reload_slider_value);
     add_entry_to_menu_page(menu_page_data,"Loading OSD Size ...", osdscale, reload_slider_value);
-    add_entry_to_menu_page(menu_page_data,"Loading OSD Level ...", osdlevel, reload_slider_value);
+    add_entry_to_menu_page(menu_page_data,"Loading OSD Level ...", osdlevel, reload_dropdown_value);
     add_entry_to_menu_page(menu_page_data,"Loading OSD Signal Bars ...", osdsignalbars, reload_dropdown_value);
     add_entry_to_menu_page(menu_page_data,"Loading Maximum Throughput ...", throughput, reload_slider_value);
     add_entry_to_menu_page(menu_page_data,"Loading Temp Throttle Threshold (°C)", temp, reload_slider_value);
